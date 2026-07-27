@@ -2,8 +2,6 @@ const express = require('express');
 const { body, query } = require('express-validator');
 
 const Contact = require('../models/Contact');
-const sendEmail = require('../utils/sendEmail');
-const templates = require('../utils/emailTemplates');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validate, honeypot } = require('../middleware/validate');
 const { contactLimiter } = require('../middleware/rateLimiter');
@@ -36,25 +34,20 @@ router.post(
       meta: { ip: req.ip, userAgent: req.get('user-agent') },
     });
 
-    /* Fire-and-forget emails: never block the response on SMTP. */
-    Promise.allSettled([
-      sendEmail({
-        to: process.env.ADMIN_NOTIFY_EMAIL || process.env.MAIL_FROM,
-        subject: `📬 New message: ${subject}`,
-        html: templates.contactAdmin(contact),
-        replyTo: email,
-      }),
-      sendEmail({
-        to: email,
-        subject: 'Thanks for reaching out — I got your message',
-        html: templates.contactAutoReply(contact),
-      }),
-    ]);
+    // ── No email sent — WhatsApp redirect handled on frontend ──
 
     res.status(201).json({
       success: true,
-      message: "Message sent successfully! I'll get back to you within 24 hours.",
-      data: { id: contact._id, createdAt: contact.createdAt },
+      message: "Message saved! You'll be redirected to WhatsApp to send it directly.",
+      data: {
+        id: contact._id,
+        createdAt: contact.createdAt,
+        // Return full data so frontend can build WhatsApp message
+        name: contact.name,
+        email: contact.email,
+        subject: contact.subject,
+        message: contact.message,
+      },
     });
   }),
 );

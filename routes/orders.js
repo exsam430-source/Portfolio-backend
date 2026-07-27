@@ -3,8 +3,6 @@ const { body, query } = require('express-validator');
 
 const Order = require('../models/Order');
 const { SERVICE_TYPES, BUDGET_RANGES, TIMELINES, ORDER_STATUS } = require('../models/Order');
-const sendEmail = require('../utils/sendEmail');
-const templates = require('../utils/emailTemplates');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validate, honeypot } = require('../middleware/validate');
 const { orderLimiter } = require('../middleware/rateLimiter');
@@ -12,7 +10,7 @@ const { protect, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-/* GET /api/orders/options — public: dropdown values (single source of truth) */
+/* GET /api/orders/options — public: dropdown values */
 router.get('/options', (req, res) => {
   res.json({
     success: true,
@@ -58,24 +56,27 @@ router.post(
       meta: { ip: req.ip, userAgent: req.get('user-agent') },
     });
 
-    Promise.allSettled([
-      sendEmail({
-        to: process.env.ADMIN_NOTIFY_EMAIL || process.env.MAIL_FROM,
-        subject: `🚀 New order ${order.reference}: ${order.projectTitle}`,
-        html: templates.orderAdmin(order),
-        replyTo: order.email,
-      }),
-      sendEmail({
-        to: order.email,
-        subject: `Order received — ${order.reference}`,
-        html: templates.orderAutoReply(order),
-      }),
-    ]);
+    // ── No email sent — WhatsApp redirect handled on frontend ──
 
     res.status(201).json({
       success: true,
-      message: `Order submitted! Your reference is ${order.reference}. Check your inbox for confirmation.`,
-      data: { id: order._id, reference: order.reference, status: order.status, createdAt: order.createdAt },
+      message: `Order submitted! Your reference is ${order.reference}. You'll be redirected to WhatsApp to send the details.`,
+      data: {
+        id: order._id,
+        reference: order.reference,
+        status: order.status,
+        createdAt: order.createdAt,
+        // Send full order back so frontend can build WhatsApp message
+        name: order.name,
+        email: order.email,
+        phone: order.phone,
+        serviceType: order.serviceType,
+        projectTitle: order.projectTitle,
+        description: order.description,
+        budget: order.budget,
+        timeline: order.timeline,
+        techPreference: order.techPreference,
+      },
     });
   }),
 );
@@ -139,9 +140,7 @@ router.get(
   }),
 );
 
-/* ────────────────────────────────────────────────────────────
-   PUT /api/orders/:id — admin: update status / note
-   ──────────────────────────────────────────────────────────── */
+/* PUT /api/orders/:id — admin: update status / note */
 router.put(
   '/:id',
   protect,
@@ -160,20 +159,10 @@ router.put(
       throw new Error('Order not found.');
     }
 
-    const statusChanged = req.body.status && req.body.status !== order.status;
-
     if (req.body.status) order.status = req.body.status;
     if (req.body.adminNote !== undefined) order.adminNote = req.body.adminNote;
     if (req.body.isRead !== undefined) order.isRead = req.body.isRead;
     await order.save();
-
-    if (statusChanged && req.body.notifyClient !== false) {
-      sendEmail({
-        to: order.email,
-        subject: `Update on your project — ${order.reference}`,
-        html: templates.orderStatusUpdate(order),
-      });
-    }
 
     res.json({ success: true, message: `Order updated to "${order.status}".`, data: order });
   }),
