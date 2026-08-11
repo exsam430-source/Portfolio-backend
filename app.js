@@ -16,6 +16,7 @@ const contactRoutes = require('./routes/contact');
 const orderRoutes = require('./routes/orders');
 const subscribeRoutes = require('./routes/subscribe');
 const authRoutes = require('./routes/auth');
+const projectRoutes = require('./routes/projects');
 
 const app = express();
 
@@ -91,6 +92,7 @@ app.get('/api/health', (req, res) => {
 /* ── API routes ───────────────────────────────────────────── */
 app.use('/api', globalLimiter);
 app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/subscribe', subscribeRoutes);
